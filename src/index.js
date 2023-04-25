@@ -116,6 +116,57 @@ app.get('/healthyStates', async (req, res) => {
   res.json({ data: healthy });
 });
 
+
+// Endpoint to get hotspot states
+app.get('/hotspotStates', async (req, res) => {
+  try {
+    const states = await connection.aggregate([
+      // Group by state and calculate rate
+      {
+        $group: {
+          _id: '$state',
+          infected: { $sum: '$infected' },
+          recovered: { $sum: '$recovered' },
+        },
+      },
+      {
+        $project: {
+          state: '$_id',
+          rate: {
+            $round: [
+              {
+                $cond: {
+                  if: { $eq: ['$infected', 0] },
+                  then: 0,
+                  else: {
+                    $divide: [
+                      { $subtract: ['$infected', '$recovered'] },
+                      '$infected',
+                    ],
+                  },
+                },
+              },
+              5,
+            ],
+          },
+          _id: 0,
+        },
+      },
+      // Match where rate is greater than 0.1
+      {
+        $match: { rate: { $gt: 0.1 } },
+      },
+    ]).toArray();
+
+    const response = { data: states };
+    res.status(200).send(response);
+  } catch (error) {
+    console.error(error);
+    res.status(500).send('Internal Server Error');
+  }
+});
+
+
 app.listen(port, () => console.log(`App listening on port ${port}!`));
 
 module.exports = app;
