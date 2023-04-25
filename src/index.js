@@ -21,75 +21,97 @@
 
 const express = require('express');
 const app = express();
-const bodyParser = require('body-parser');
+const bodyParser = require("body-parser");
 const port = 8080;
-const { connection } = require('./connector');
 
+// Parse JSON bodies (as sent by API clients)
 app.use(express.urlencoded({ extended: false }));
 app.use(express.json());
 
+const { connection } = require('./connector');
+
+const roundTo5Decimal = (num) => {
+  return { $round: [{ $toDouble: num }, 5] };
+};
+
 app.get('/totalRecovered', async (req, res) => {
-  const data = await connection.aggregate([
+  const totalRecovered = await connection.aggregate([
     {
       $group: {
         _id: 'total',
-        recovered: {
-          $sum: '$recovered',
-        },
+        recovered: { $sum: '$recovered' },
       },
     },
   ]);
-  res.status(200).json({ data: data[0] });
+  res.json({
+    data: totalRecovered[0],
+  });
 });
 
 app.get('/totalActive', async (req, res) => {
-  const data = await connection.aggregate([
+  const totalActive = await connection.aggregate([
     {
       $group: {
         _id: 'total',
         active: {
-          $sum: { $subtract: ['$infected', '$recovered'] },
+          $sum: {
+            $subtract: ['$infected', '$recovered'],
+          },
         },
       },
     },
   ]);
-  res.status(200).json({ data: data[0] });
+  res.json({
+    data: totalActive[0],
+  });
 });
 
 app.get('/totalDeath', async (req, res) => {
-  const data = await connection.aggregate([
+  const totalDeath = await connection.aggregate([
     {
       $group: {
         _id: 'total',
-        death: {
-          $sum: '$death',
-        },
+        death: { $sum: '$death' },
       },
     },
   ]);
-  res.status(200).json({ data: data[0] });
+  res.json({
+    data: totalDeath[0],
+  });
 });
 
 app.get('/hotspotStates', async (req, res) => {
-  try {
-    const data = await connection.aggregate([
-      { $project: { _id: 0, state: 1, rate: { $round: [{ $divide: ["$infected", "$population"] }, 5] } } },
-      { $match: { rate: { $gt: 0.1 } } }
-    ]).toArray();
-    res.send(data);
-  } catch (error) {
-    console.error(error);
-    res.status(500).send('Internal Server Error');
-  }
+  const hotspotStates = await connection.aggregate([
+    {
+      $project: {
+        state: 1,
+        rate: roundTo5Decimal({
+          $divide: [
+            { $subtract: ['$infected', '$recovered'] },
+            '$infected',
+          ],
+        }),
+      },
+    },
+    {
+      $match: {
+        rate: { $gt: 0.1 },
+      },
+    },
+  ]);
+  res.json({
+    data: hotspotStates,
+  });
 });
 
 app.get('/healthyStates', async (req, res) => {
-  const data = await connection.aggregate([
+  const healthyStates = await connection.aggregate([
     {
-      $addFields: {
-        mortality: {
-          $round: [{ $divide: ['$death', '$infected'] }, 5],
-        },
+      $project: {
+        state: 1,
+        mortality: roundTo5Decimal({
+          $divide: ['$death', '$infected'],
+        }),
       },
     },
     {
@@ -97,17 +119,14 @@ app.get('/healthyStates', async (req, res) => {
         mortality: { $lt: 0.005 },
       },
     },
-    {
-      $project: {
-        state: 1,
-        mortality: 1,
-        _id: 0,
-      },
-    },
   ]);
-  res.status(200).json({ data });
+  res.json({
+    data: healthyStates,
+  });
 });
 
-app.listen(port, () => console.log(`App listening on port ${port}!`));
+app.listen(port, () =>
+  console.log(`App listening on port ${port}!`)
+);
 
 module.exports = app;
