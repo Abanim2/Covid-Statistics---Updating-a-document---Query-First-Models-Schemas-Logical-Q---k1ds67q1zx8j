@@ -71,29 +71,32 @@ app.get('/totalDeath', async (req, res) => {
 });
 
 app.get('/hotspotStates', async (req, res) => {
-  const data = await connection.aggregate([
-    {
-      $addFields: {
-        rate: {
-          $round: [{ $subtract: ['$infected', '$recovered'] }, 5],
-        },
-      },
-    },
-    {
-      $match: {
-        rate: { $gt: 0.1 },
-      },
-    },
+  const critical = 0.1;
+  const hotspots = await covidStats.aggregate([
     {
       $project: {
         state: 1,
-        rate: 1,
-        _id: 0,
-      },
+        rate: {
+          $round: [
+            {
+              $divide: [
+                { $subtract: ["$infected", "$recovered"] },
+                "$infected"
+              ]
+            },
+            5
+          ]
+        },
+        _id: 0
+      }
     },
+    {
+      $match: { rate: { $gt: critical } }
+    }
   ]);
-  res.status(200).json({ data });
+  res.send(hotspots);
 });
+
 
 app.get('/healthyStates', async (req, res) => {
   const data = await connection.aggregate([
