@@ -71,32 +71,17 @@ app.get('/totalDeath', async (req, res) => {
 });
 
 app.get('/hotspotStates', async (req, res) => {
-  const critical = 0.1;
-  const hotspots = await covidStats.aggregate([
-    {
-      $project: {
-        state: 1,
-        rate: {
-          $round: [
-            {
-              $divide: [
-                { $subtract: ["$infected", "$recovered"] },
-                "$infected"
-              ]
-            },
-            5
-          ]
-        },
-        _id: 0
-      }
-    },
-    {
-      $match: { rate: { $gt: critical } }
-    }
-  ]);
-  res.send(hotspots);
+  try {
+    const data = await connection.aggregate([
+      { $project: { _id: 0, state: 1, rate: { $round: [{ $divide: ["$infected", "$population"] }, 5] } } },
+      { $match: { rate: { $gt: 0.1 } } }
+    ]).toArray();
+    res.send(data);
+  } catch (error) {
+    console.error(error);
+    res.status(500).send('Internal Server Error');
+  }
 });
-
 
 app.get('/healthyStates', async (req, res) => {
   const data = await connection.aggregate([
