@@ -165,6 +165,50 @@ app.get('/hotspotStates', async (req, res) => {
     res.status(500).send('Internal Server Error');
   }
 });
+app.get('/hotspotStates', async (req, res) => {
+  try {
+    const data = await covid19Stats.aggregate([
+      {
+        $project: {
+          state: "$state",
+          rate: {
+            $round: [
+              {
+                $divide: [
+                  {
+                    $subtract: ["$infected", "$recovered"]
+                  },
+                  "$infected"
+                ]
+              },
+              5
+            ]
+          }
+        }
+      },
+      {
+        $match: {
+          rate: { $gt: 0.1 }
+        }
+      },
+      {
+        $project: {
+          state: 1,
+          rate: 1,
+          _id: 0
+        }
+      }
+    ]);
+
+    res.status(200).json({
+      data: data
+    });
+  } catch (err) {
+    res.status(500).json({
+      message: err.message
+    });
+  }
+});
 
 
 app.listen(port, () => console.log(`App listening on port ${port}!`));
